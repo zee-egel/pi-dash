@@ -66,7 +66,7 @@ export class Monitor {
         if (
           old &&
           (container.restarts > old.restarts ||
-            (old.state === "running" &&
+            (old.state === "running" && container.exitCode !== 0 &&
               ["exited", "dead"].includes(container.state)))
         )
           this.events.add(

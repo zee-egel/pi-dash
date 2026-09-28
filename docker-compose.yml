@@ -1,0 +1,54 @@
+services:
+  control-center:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    init: true
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "${DOCKER_GID:?Set DOCKER_GID to the group ID of /var/run/docker.sock}"
+    # Linux host networking supplies real host interfaces and traffic counters.
+    # The server binds loopback only. No ports are published to the internet.
+    network_mode: host
+    env_file: .env
+    environment:
+      BIND_ADDRESS: 127.0.0.1
+      PORT: ${PORT:-3000}
+      HOST_PROC: /host/proc
+      HOST_SYS: /host/sys
+      HOST_ROOT: /host/root
+      DATA_DIR: /app/data
+      APPS_CONFIG_PATH: /app/config/apps.json
+      DOCKER_SOCKET: /var/run/docker.sock
+      DEPLOY_HOME: ${DEPLOY_HOME:-/tmp}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host/root:ro
+      - ./config:/app/config:ro
+      - ./data:/app/data
+      # Add deployment repositories at identical absolute host/container paths.
+      # - /srv/columbot:/srv/columbot
+      # Optional: dedicated git/registry credentials, never your whole home.
+      # Set DEPLOY_HOME=/deploy-home if enabling this writable CLI state mount.
+      # - /srv/pi-control-credentials:/deploy-home
+      # SSH with the image's node user (PUID=1000):
+      # - /srv/pi-control-ssh:/home/node/.ssh:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+    healthcheck:
+      # A 401 demonstrates the authenticated HTTP service is reachable.
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/session').then(r=>process.exit(r.status===401?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

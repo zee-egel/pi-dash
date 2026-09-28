@@ -26,6 +26,7 @@ export interface Container {
   rx: number | null;
   tx: number | null;
   restarts: number;
+  exitCode: number;
   project: string | null;
 }
 export interface ContainerDetail extends Container {

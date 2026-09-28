@@ -18,8 +18,9 @@ export function safeDockerError(error: unknown): string {
 }
 export class DockerService {
   client: Docker;
+  private previousCpu = new Map<string, { cpu: number; system: number }>();
   constructor(socketPath: string) {
-    this.client = new Docker({ socketPath, timeout: 15_000 });
+    this.client = new Docker({ socketPath, timeout: 30_000 });
   }
   async list(): Promise<Container[]> {
     const rows = await this.client.listContainers({ all: true });
@@ -40,13 +41,11 @@ export class DockerService {
             ]);
             let cpu: number | null = null;
             if (stats) {
-              const delta =
-                stats.cpu_stats.cpu_usage.total_usage -
-                stats.precpu_stats.cpu_usage.total_usage;
-              const systemDelta =
-                stats.cpu_stats.system_cpu_usage -
-                stats.precpu_stats.system_cpu_usage;
-              if (systemDelta > 0)
+              const previous = this.previousCpu.get(row.Id);
+              const delta = previous ? stats.cpu_stats.cpu_usage.total_usage - previous.cpu : 0;
+              const systemDelta = previous ? stats.cpu_stats.system_cpu_usage - previous.system : 0;
+              this.previousCpu.set(row.Id, { cpu: stats.cpu_stats.cpu_usage.total_usage, system: stats.cpu_stats.system_cpu_usage });
+              if (systemDelta > 0 && delta >= 0)
                 cpu =
                   (delta / systemDelta) *
                   (stats.cpu_stats.online_cpus ||
@@ -61,7 +60,7 @@ export class DockerService {
               state: inspect.State.Status,
               health: inspect.State.Health?.Status ?? "none",
               started: inspect.State.StartedAt,
-              ports: row.Ports.map((port) =>
+              ports: (row.Ports ?? []).map((port) =>
                 port.PublicPort
                   ? `${port.IP ?? ""}:${port.PublicPort} → ${port.PrivatePort}/${port.Type}`
                   : `${port.PrivatePort}/${port.Type}`,
@@ -90,6 +89,7 @@ export class DockerService {
                   )
                 : null,
               restarts: inspect.RestartCount,
+              exitCode: inspect.State.ExitCode,
               project:
                 inspect.Config.Labels?.["com.docker.compose.project"] ?? null,
             };
@@ -97,6 +97,8 @@ export class DockerService {
         )),
       );
     }
+    const running = new Set(result.filter(item => item.state === 'running').map(item => item.id));
+    for (const id of this.previousCpu.keys()) if (!running.has(id)) this.previousCpu.delete(id);
     return result.sort((a, b) => a.name.localeCompare(b.name));
   }
   async detail(id: string, containers: Container[]): Promise<ContainerDetail> {
@@ -111,8 +113,8 @@ export class DockerService {
       ...base,
       created: inspect.Created,
       restartPolicy: inspect.HostConfig.RestartPolicy?.Name ?? "none",
-      networks: Object.keys(inspect.NetworkSettings.Networks),
-      mounts: inspect.Mounts.map((mount) => ({
+      networks: Object.keys(inspect.NetworkSettings.Networks ?? {}),
+      mounts: (inspect.Mounts ?? []).map((mount) => ({
         type: mount.Type,
         destination: mount.Destination,
         readOnly: !mount.RW,

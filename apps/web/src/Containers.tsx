@@ -30,8 +30,7 @@ export function LogViewer({ container, close }: { container: Container; close: (
   useEffect(() => {
     if (paused) return;
     const source = new EventSource(`/api/containers/${container.id}/logs?tail=${first.current ? tail : 0}`);
-    first.current = false;
-    source.onopen = () => setStatus('Streaming');
+    source.onopen = () => { first.current = false; setStatus('Streaming'); };
     source.addEventListener('log', event => { const chunk = JSON.parse(event.data) as string; setLines(current => (current + chunk).slice(-250_000)); });
     source.addEventListener('end', () => { setStatus('Container stream ended'); source.close(); });
     source.addEventListener('expired', () => { window.dispatchEvent(new Event('session-expired')); source.close(); });

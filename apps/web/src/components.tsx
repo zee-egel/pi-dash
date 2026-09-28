@@ -9,9 +9,8 @@ export function Empty({ children }: { children: ReactNode }) { return <div class
 export function Skeleton() { return <div className="skeleton-grid">{[0, 1, 2, 3].map(index => <div key={index} className="skeleton"/>)}</div>; }
 export function Chart({ history, metric, color = '#82c9a8' }: { history: Metric[]; metric: 'cpu' | 'memoryUsed' | 'temperature' | 'rx'; color?: string }) {
   return <div className="chart" aria-label={`Recent ${metric} history`}><ResponsiveContainer width="100%" height="100%"><AreaChart data={history}>
-    <defs><linearGradient id={`fill-${metric}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={0.24}/><stop offset="100%" stopColor={color} stopOpacity={0}/></linearGradient></defs>
     <Tooltip contentStyle={{ background: '#161b23', border: '1px solid #303741', borderRadius: 8 }} labelFormatter={(_, payload) => payload?.[0]?.payload?.time ? new Date(payload[0].payload.time).toLocaleTimeString() : ''} formatter={value => metric === 'memoryUsed' || metric === 'rx' ? `${bytes(Number(value))}${metric === 'rx' ? '/s' : ''}` : Number(value).toFixed(1)}/>
-    <Area type="monotone" dataKey={metric} stroke={color} fill={`url(#fill-${metric})`} strokeWidth={1.7} isAnimationActive={false} connectNulls={false}/>
+    <Area type="monotone" dataKey={metric} stroke={color} fill="none" strokeWidth={1.7} isAnimationActive={false} connectNulls={false}/>
   </AreaChart></ResponsiveContainer></div>;
 }
 export function ActivityList({ items }: { items: Activity[] }) { return <div className="activity-list">{items.length ? items.map(item => <div className="activity-row" key={item.id}>

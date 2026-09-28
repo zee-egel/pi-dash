@@ -129,16 +129,16 @@ export async function buildServer(
       return reply.code(202).send(deployments.start(id));
     },
   );
-  let streams = 0;
+  const streams = new Set<import('node:http').ServerResponse>();
   const limitStream = (reply: import("fastify").FastifyReply) => {
-    if (streams >= 12) {
+    if (streams.size >= 12) {
       void reply
         .code(429)
         .send({ error: "Too many live streams. Close another tab." });
       return false;
     }
-    streams++;
-    reply.raw.once("close", () => streams--);
+    streams.add(reply.raw);
+    reply.raw.once("close", () => streams.delete(reply.raw));
     return true;
   };
   server.get("/api/events", async (req, reply) => {
@@ -188,6 +188,11 @@ export async function buildServer(
         : reply.sendFile("index.html"),
     );
   }
+  server.addHook("preClose", async () => {
+    monitor.close();
+    deployments.close();
+    for (const stream of streams) stream.destroy();
+  });
   server.addHook("onClose", async () => {
     monitor.close();
     deployments.close();

@@ -126,7 +126,7 @@ export class Deployments {
         if (old) {
           state.lastDeployment = old.lastDeployment;
           state.status = old.status === "running" ? "failed" : old.status;
-          state.output = old.output.slice(-500);
+          state.output = [old.output.join("").slice(-64_000)];
         }
       }
     } catch (error) {
@@ -169,7 +169,7 @@ export class Deployments {
   private async run(app: AppConfig, state: Deployment) {
     const log = (text: string) => {
       // Bound both the number and length of chunks from potentially noisy builds.
-      state.output = [...state.output, text.slice(-8000)].slice(-500);
+      state.output = [(state.output.join("") + text).slice(-64_000)];
       this.events.broadcast("deployment", state);
     };
     this.events.add("deployment.started", `${app.name} deployment started`);
@@ -192,6 +192,10 @@ export class Deployments {
         );
       for (const step of deploymentCommands(app)) {
         log(`\n› ${step.command} ${step.args.join(" ")}\n`);
+        if (step.command === 'docker') {
+          const currentCompose = await realpath(path.join(directory, app.composeFile));
+          if (!currentCompose.startsWith(`${directory}${path.sep}`)) throw new Error('Updated Compose file resolves outside application directory');
+        }
         await this.command(app, step.command, step.args, log);
       }
       // Compose --wait checks health checks where provided, running state otherwise.

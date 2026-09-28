@@ -4,20 +4,20 @@ import {
   timingSafeEqual,
   createHmac,
 } from "node:crypto";
-import { promisify } from "node:util";
 import cookie from "@fastify/cookie";
 import rateLimit from "@fastify/rate-limit";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { z } from "zod";
 import type { Config } from "./config.js";
-const scrypt = promisify(scryptCallback);
 const lifetime = 8 * 60 * 60 * 1000;
 export async function verifyPassword(
   password: string,
   hash: string,
 ): Promise<boolean> {
   const [, salt, expected] = hash.split(":");
-  const actual = (await scrypt(password, salt, 64)) as Buffer;
+  const actual = await new Promise<Buffer>((resolve, reject) => {
+    scryptCallback(password, salt, 64, { N: 65536, r: 8, p: 1, maxmem: 128 * 1024 * 1024 }, (error, key) => error ? reject(error) : resolve(key));
+  });
   return timingSafeEqual(actual, Buffer.from(expected, "hex"));
 }
 export interface Session {
@@ -59,7 +59,8 @@ export async function registerAuth(server: FastifyInstance, config: Config) {
     );
     if (config.COOKIE_SECURE === "true")
       reply.header("Strict-Transport-Security", "max-age=31536000");
-    const pathname = req.url.split("?")[0];
+    // Authorize the matched route, including requests with encoded paths.
+    const pathname = req.routeOptions.url ?? req.url.split("?")[0];
     if (!pathname.startsWith("/api/")) return;
     reply.header("Cache-Control", "no-store");
     const unsafe = !["GET", "HEAD", "OPTIONS"].includes(req.method);
